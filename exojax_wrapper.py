@@ -1,3 +1,4 @@
+#Mostly taken from http://secondearths.sakura.ne.jp/exojax/, I just made some functions to 'summarise' them for my personal work
 import scipy.interpolate as sci
 import jax.numpy as jnp
 import numpy as np

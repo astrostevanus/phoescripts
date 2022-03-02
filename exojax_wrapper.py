@@ -6,6 +6,12 @@ from jax import vmap, jit
 import h5py
 
 Tref=296.0
+
+dir_heliosk='/mnt/phoenest/stevanus/PlanetSpecGen/HELIOS-K/data/'
+dir_kurucz=str(dir_heliosk)+"kuruczCor/"
+dir_exomol=str(dir_heliosk)+"exomol/"
+dir_hitemp=str(dir_heliosk)+"hitemp/"
+
 """"
 Binary file format
 Kurucz 'd,d,d,d,d'
@@ -167,12 +173,11 @@ def Qt_interpol(pf_file):
     Qt_interp=sci.interp1d(T_hit,QT_hit)
     return (Qt_interp)
 
-def qt_qt0_barklem_collet_heliosk(dir_kurucz,atomic_name, iion, Tarr):
+def qt_qt0_barklem_collet_heliosk(atomic_name, iion, Tarr):
     """
     Calculating the Q(Tarr)/Q(Tref) for atomic species using Barklem Collet .pf files in HELIOS-K database
 
     Args:
-        dir_kurucz : directory of the kurucz database (.pf files)
         atomic_name: the name of the atomic species
         iion       : ionisation level (e.g., neutral=1, singly ionized=2, etc.)
         Tarr       : array of temperatures
@@ -257,10 +262,11 @@ def load_mol_bin_heliosk(binary_filename, pf_file, molmass, nus, whichdata):
             Einstein coefficient (A) within wavenumber range
     """
     from exojax.exojax_wrapper import Qt_interpol
-    Qt_interp=Qt_interpol(pf_file)
+    
     
     if whichdata=="hitemp" or whichdata=="HITEMP":
-        data=read_binary_file_heliosk(binary_filename,1,np.dtype('<4c,d,d,d,d,d,d,d,d'))
+        Qt_interp=Qt_interpol(str(dir_hitemp)+str(pf_file))
+        data=read_binary_file_heliosk(str(dir_hitemp)+str(binary_filename),1,np.dtype('<4c,d,d,d,d,d,d,d,d'))
 
         mask_nu=(data[:,0]>=nus[0])*(data[:,0]<=nus[-1])
         nu_lines= data[:,0][mask_nu]
@@ -276,9 +282,9 @@ def load_mol_bin_heliosk(binary_filename, pf_file, molmass, nus, whichdata):
 
     elif whichdata=="exomol" or whichdata=="EXOMOL":
         from exojax.utils.constants import hcperk
-
+        Qt_interp=Qt_interpol(str(dir_exomol)+str(pf_file))
         QTref=Qt_interp(Tref)
-        data=read_binary_file_heliosk(binary_filename,0,np.dtype('d,d,d,d'))
+        data=read_binary_file_heliosk(str(dir_exomol)+binary_filename,0,np.dtype('d,d,d,d'))
 
         mask_nu=(data[:,0]>=nus[0])*(data[:,0]<=nus[-1])
         nu_lines= data[:,0][mask_nu]
@@ -292,13 +298,12 @@ def load_mol_bin_heliosk(binary_filename, pf_file, molmass, nus, whichdata):
     else:
         print ("Currently only support Exomol and HITEMP linelists")
 
-def load_kurucz_bin_heliosk_exojax(dir_kurucz, atomic_name, iion, nus):
+def load_kurucz_bin_heliosk_exojax(atomic_name, iion, nus):
     """
     Loading kurucz binary files in Exojax specialised format (to include gamma Stark and van Der Waals,
     HELIOS-K format does not include these)
 
     Args:
-        dir_kurucz : directory of the kurucz database (.pf files)
         atomic_name: the name of the atomic species
         iion       : ionisation level (e.g., neutral=1, singly ionized=2, etc.)
         nus        : wavenumber (cm-1)
@@ -411,7 +416,7 @@ def db_hitemp(db_linelist, molmass, nus, Tarr, Parr, localid, pf_file):
     from exojax.exojax_wrapper import Qt_interpol
 
     Tref=296.0
-    Qt_interp=Qt_interpol(pf_file)
+    Qt_interp=Qt_interpol(str(dir_hitemp)+str(pf_file))
     qt_qt0=Qt_interp(Tarr)/Qt_interp(Tref)
 
     Pself=1
@@ -433,7 +438,7 @@ def db_hitemp(db_linelist, molmass, nus, Tarr, Parr, localid, pf_file):
 
     return nu_lines[masknan], SijM[:,masknan], gammaLM[:,masknan], sigmaDM[:,masknan]
 
-def db_vald(db_linelist, atomic_name, iion, nus, Tarr, Parr, vmr_H, vmr_He, vmr_H2, dir_kurucz):
+def db_vald(db_linelist, atomic_name, iion, nus, Tarr, Parr, vmr_H, vmr_He, vmr_H2):
     """
     Calculating the line strength (SijM) and broadening width (gammaLM, sigmaDM), and extracting line positions (nu_lines)
     for VALD linelist
@@ -448,7 +453,6 @@ def db_vald(db_linelist, atomic_name, iion, nus, Tarr, Parr, vmr_H, vmr_He, vmr_
         vmr_H      : volume mixing ratio of hydrogen
         vmr_He     : volume mixing ratio of helium
         vmr_H2     : volume mixing ratio of molecular hydrogen
-        dir_kurucz : directory of the kurucz database (containing .pf files)
 
     Return:
         line positions, line strengths,  Lorentz's width, Doppler's width
@@ -457,7 +461,7 @@ def db_vald(db_linelist, atomic_name, iion, nus, Tarr, Parr, vmr_H, vmr_He, vmr_
     from exojax.spec import atomll, SijT, doppler_sigma
     from exojax.exojax_wrapper import ionE_atom, qt_qt0_barklem_collet_heliosk
 
-    qt_qt0=qt_qt0_barklem_collet_heliosk(dir_kurucz, atomic_name, iion,Tarr)
+    qt_qt0=qt_qt0_barklem_collet_heliosk(atomic_name, iion,Tarr)
 
     atomic_number=int(elt0[:,0][elt0[:,1]==atomic_name])
 
@@ -504,11 +508,11 @@ def db_mol_heliosk(db_linelist, molmass, nus, Tarr, Parr,  pf_file, whichdata):
     """
     
     from exojax.exojax_wrapper import Qt_interpol
-    
-    Qt_interp=Qt_interpol(pf_file)
-    qt_qt0=Qt_interp(Tarr)/Qt_interp(Tref)
-    
+        
     if whichdata=="hitemp" or whichdata=="HITEMP":
+        Qt_interp=Qt_interpol(str(dir_hitemp)+(pf_file))
+        qt_qt0=Qt_interp(Tarr)/Qt_interp(Tref)
+        
         from exojax.spec.hitran import SijT, doppler_sigma, gamma_hitran, gamma_natural
             
         nu_lines, logSij0, ELower, A, delta, gammaAir, gammaSelf, n_air= db_linelist
@@ -520,7 +524,10 @@ def db_mol_heliosk(db_linelist, molmass, nus, Tarr, Parr,  pf_file, whichdata):
     elif whichdata=="exomol" or whichdata=="EXOMOL":
         from exojax.spec import gamma_natural, SijT,doppler_sigma
         from exojax.spec.exomol import gamma_exomol
-    
+        
+        Qt_interp=Qt_interpol(str(dir_exomol)+(pf_file))
+        qt_qt0=Qt_interp(Tarr)/Qt_interp(Tref)
+
         alpha_ref= 0.07 #Default value of Lorentz half-width
         n_Texp= 0.5 #Default value of temperature exponent
 
@@ -538,7 +545,7 @@ def db_mol_heliosk(db_linelist, molmass, nus, Tarr, Parr,  pf_file, whichdata):
     return nu_lines[masknan], SijM[:,masknan], gammaLM[:,masknan], sigmaDM[:,masknan]
 
 
-def db_kurucz(db_linelist, atomic_name, iion, nus, Tarr, Parr, vmr_H, vmr_He, vmr_H2, dir_kurucz):
+def db_kurucz(db_linelist, atomic_name, iion, nus, Tarr, Parr, vmr_H, vmr_He, vmr_H2):
     """
     Calculating the line strength (SijM) and broadening width (gammaLM, sigmaDM), and extracting line positions (nu_lines)
     for Kurucz linelist from Exojax-formatted binary files
@@ -553,14 +560,14 @@ def db_kurucz(db_linelist, atomic_name, iion, nus, Tarr, Parr, vmr_H, vmr_He, vm
         vmr_H      : volume mixing ratio of hydrogen
         vmr_He     : volume mixing ratio of helium
         vmr_H2     : volume mixing ratio of molecular hydrogen
-        dir_kurucz : directory of the kurucz database (containing .pf files)
+
     Return:
         line positions, line strengths,  Lorentz's width, Doppler's width
     """
     from exojax.spec import atomll, SijT, doppler_sigma
     from exojax.exojax_wrapper import ionE_atom, qt_qt0_barklem_collet_heliosk
 
-    qt_qt0=qt_qt0_barklem_collet_heliosk(dir_kurucz,atomic_name, iion,Tarr)
+    qt_qt0=qt_qt0_barklem_collet_heliosk(atomic_name, iion,Tarr)
 
     nu_lines, logSij0, A, elower, eupper, gammaRad, gammaSta, vdWdamp= db_linelist
     atomic_number=int(elt0[:,0][elt0[:,1]==atomic_name])
